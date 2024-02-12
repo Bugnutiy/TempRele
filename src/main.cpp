@@ -7,6 +7,7 @@
 #define RELAY_DELAY_W1 3000
 #define RELAY_DELAY_W2 5000
 
+#define W1_WORK_TIME 20 * 60ULL * 1000
 // #define PROTECT_W1 60000
 // #define PROTECT_DEGREES_W1 1
 // #define PROTECT_RESET_W1 60000
@@ -66,6 +67,8 @@ uint32_t timerTempProtectReset = 0;
 bool flag = 1;
 uint8_t mode = 0;
 void work0();
+bool w1_f = 1;
+uint32_t timer_w1 = 0;
 void work1();
 void work2();
 
@@ -115,6 +118,10 @@ void loop()
           relay.change();
           delay(300);
         }
+        flag = 1;
+        w1_f = 1;
+        timerTempProtect = millis();
+        timerTempProtectReset = millis();
       }
     }
   }
@@ -196,6 +203,7 @@ void work0()
     Serial.println(tempSet);
 #endif
     timerRelay = millis() - RELAY_DELAY_W0;
+    flag = 1;
   }
   // работа реле
   if (uint32_t(millis() - timerRelay) >= RELAY_DELAY_W0)
@@ -224,7 +232,10 @@ void work1()
     Serial.println("W1 Here");
   }
 #endif
-
+  if (uint32_t(millis() - timer_w1) >= W1_WORK_TIME && !w1_f)
+  {
+    flag = 0;
+  }
   // Опрос датчика температуры
   if (uint32_t(millis() - timerTemp) >= 500)
   {
@@ -248,6 +259,8 @@ void work1()
     Serial.println(tempSet);
 #endif
     timerRelay = millis() - RELAY_DELAY_W1;
+    flag = 1;
+    w1_f = 1;
   }
   // работа реле
   if (uint32_t(millis() - timerRelay) >= RELAY_DELAY_W1)
@@ -257,7 +270,14 @@ void work1()
     if (temp >= tempSet)
     {
       if (relay.set(0))
+      {
         timerRelay = millis();
+        if (w1_f)
+        {
+          w1_f = 0;
+          timer_w1 = millis();
+        }
+      }
     }
     else
     {
@@ -267,7 +287,7 @@ void work1()
   }
 
 #ifdef PROTECT_W1
-  if ((uint32_t(millis() - timerTempProtect) >= PROTECT_W1) && flag)
+  if ((uint32_t(millis() - timerTempProtect) >= PROTECT_W1) && flag && w1_f)
   {
     timerTempProtect = millis();
 #ifdef PROTECT_RESET_W1
@@ -285,7 +305,7 @@ void work1()
     }
   }
 #ifdef PROTECT_RESET_W1
-  if (!flag && (uint32_t(millis() - timerTempProtectReset) >= PROTECT_RESET_W1))
+  if (!flag && !w1_f && (uint32_t(millis() - timerTempProtectReset) >= PROTECT_RESET_W1))
   {
     tempPrev = temp;
     timerTempProtectReset = millis();
@@ -330,6 +350,7 @@ void work2()
     Serial.println(tempSet);
 #endif
     timerRelay = millis() - RELAY_DELAY_W2;
+    flag = 1;
   }
   // работа реле
   if (uint32_t(millis() - timerRelay) >= RELAY_DELAY_W2)
